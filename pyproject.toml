@@ -11,7 +11,7 @@ requires = ["setuptools",
 			]
 build-backend = "setuptools.build_meta" 
 
-[poseigen_seaside]
+[project]
 
 name = "poseigen_seaside"
 
@@ -21,7 +21,9 @@ description = "The basics for Poseigen software"
 
 readme = "README.md"
 
-license = { file = "LICENSE.txt" }
+license = "MIT"
+
+license-files = ["LICEN[CS]E.*"]
 
 keywords = []
 
