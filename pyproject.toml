@@ -3,6 +3,7 @@
 [build-system]
 
 requires = ["setuptools", 
+			"Python >= 3.12",
 			"numpy", 
 			"pandas", 
 			"matplotlib", 
@@ -51,7 +52,8 @@ classifiers = [
   
 ]
 
-dependencies = ["numpy", 
+dependencies = ["Python >= 3.12",
+				"numpy", 
 				"pandas", 
 				"matplotlib", 
 				"denseweight", 
