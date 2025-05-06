@@ -1,0 +1,12 @@
+LICENSE.txt
+README.md
+pyproject.toml
+src/poseigen_seaside/__init__.py
+src/poseigen_seaside/basics.py
+src/poseigen_seaside/metrics.py
+src/poseigen_seaside/visuals.py
+src/poseigen_seaside.egg-info/PKG-INFO
+src/poseigen_seaside.egg-info/SOURCES.txt
+src/poseigen_seaside.egg-info/dependency_links.txt
+src/poseigen_seaside.egg-info/requires.txt
+src/poseigen_seaside.egg-info/top_level.txt
