@@ -185,9 +185,6 @@ def Epsilon(inp, expo = 2, gamma = 1, smallest = True):
     return me + sigamma if smallest else me - sigamma
 
 
-
-
-
 def RevDistro(vals, select, alpha = 1.0): 
     
     dw = DenseWeight(alpha=alpha)
@@ -237,69 +234,6 @@ def GeomNumSpacing(start, end, num, plier):
 
 
 
-def WeightsAdjuster(inp1, weights):
-    if weights == None or isinstance(weights, int): 
-        weights = 1
-    return weights
-
-
-def AError(inp1, inp2, weights = None, mean = True,
-           revbase = None, revpseudo = False, 
-           revsqrt = None, 
-           rel = False, 
-           expo = 2, root = False, weightbefore = False): 
-    
-    #added revbase and revpseudo to reverse log transformations.
-    #Applies to both inputs. 
-
-    if revbase != None:
-        inp1, inp2 = [(revbase ** x) - revpseudo for x in [inp1, inp2]]
-    elif revsqrt != None: 
-        inp1, inp2 = [(x ** revsqrt) - revpseudo for x in [inp1, inp2]]
-
-    if expo != 2: root = False
-    w = WeightsAdjuster(inp1, weights)
-
-    rr = inp2 if rel else 1
-
-    e = abs((inp1-inp2) / rr) #RELATIVE ERROR 
-
-    if weightbefore: w = w **expo
-    
-    AE = w * (e ** expo)
-    
-    if mean == True:
-        if isinstance(w, int) == False: AE = AE.sum() / w.sum()
-        else: AE = AE.mean()
-
-        if root: AE = AE**(1/2)
-
-    return AE
-
-
-
-
-
-
-def ZError(inp1, inp2, std = 1, 
-                    weights = None, mean = True,
-                    pseudo = 1, log = False,
-                    expo = 2, root = False, weightbefore = False): 
-    
-    if expo != 2: root = False
-    weights = WeightsAdjuster(inp1, weights)
-
-    e = (abs(inp1-inp2)) / (pseudo + std)
-    if log: e = log(1 + e) #########
-
-    AE = (weights * e)**expo if weightbefore else weights * (e **expo)
-    
-    if mean is True:  
-        AE = AE.mean()
-        if root: AE = AE**(1/2)
-    
-    return AE
-
 
 
 def CosineSimilarity(a, b, eps = 1e-6): 
@@ -307,62 +241,8 @@ def CosineSimilarity(a, b, eps = 1e-6):
 
 
 
-###################################################################################
 
-
-
-def TocherApprox(z):
-    # REQUIRES INPUTS TO HAVE Z > 0 !!!!!!!!!    
-    
-    pi = 3.141592653589793
-    e = 2.718281828459045
-    bay = (2 / pi) ** 0.5
-    pa = e ** (2 * bay * z)
-
-    return pa / (1 + pa)
-
-def TocherApproxTwoSide(z):
-    # REQUIRES INPUTS TO HAVE Z > 0 !!!!!!!!!
-    xo = TocherApprox(z)
-    return (xo - 0.5) * 2
-
-
-###################################################################################
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def Correlation(inp1, inp2, weights = None, inverse = False): 
-
-    weights = WeightsAdjuster(inp1, weights)
-    if isinstance(weights, int): cor = np.corrcoef(inp1,inp2)[0, 1]
-    else: 
-        def m(inp1, weights): return np.sum(inp1 * weights) / np.sum(weights)
-        def cov(inp1, inp2, weights): return np.sum(weights * (inp1 - m(inp1, weights)) * (inp2 - m(inp2, weights))) / np.sum(weights)
-        cor = cov(inp1, inp2, weights) / np.sqrt(cov(inp1, inp1, weights) * cov(inp2, inp2, weights))
-    return cor if inverse == False else 1/cor
-
-
-metrics_smallest = {
-                    Correlation: False,
-                    AError: True,
-                    }    
+#----------------------------------------
 
 
 def SubSample_Random(X, weights = False, proportion = 0.3, num_subsamples = 1, group = None):

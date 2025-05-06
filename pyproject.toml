@@ -7,7 +7,8 @@ requires = ["setuptools",
 			"pandas", 
 			"matplotlib", 
 			"denseweight", 
-			"tqdm"
+			"tqdm", 
+      "torch"
 			]
 
 [project]
@@ -53,7 +54,8 @@ dependencies = ["numpy",
 				"pandas", 
 				"matplotlib", 
 				"denseweight", 
-				"tqdm"]
+				"tqdm", 
+        "torch"]
 
 [project.urls]
 "Homepage" = "https://github.com/husam94/poseigen_seaside"
