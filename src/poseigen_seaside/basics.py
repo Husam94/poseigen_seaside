@@ -11,8 +11,6 @@ import urllib
 
 ####################################################################
 
-print('xoxo')
-
 def PickleDump(inp, pathname):
     if pathname.endswith('.p') is not True: pathname = pathname + '.p'
     return pickle.dump(inp, open(pathname, 'wb'))
