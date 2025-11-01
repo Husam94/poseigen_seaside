@@ -1,3 +1,34 @@
+"""
+
+poseigen_seaside.visuals
+------------------------
+
+Plotting and visualization utilities for Poseigen.
+
+Common Arguments
+---------------
+figsize : tuple, optional
+    Figure size in inches, e.g., (5, 5). Default is (5, 5).
+fontsize : int, optional
+    Font size for labels and titles. Default is 10.
+ax : matplotlib.axes.Axes, optional
+    Existing axes to plot on. If None, a new figure and axes are created.
+color : str or list, optional
+    Color or list of colors for plot elements.
+alpha : float, optional
+    Transparency level for plot elements. Default is 1.0.
+xlabel, ylabel, suptitle : str, optional
+    Axis and plot titles.
+text : tuple, optional
+    (x, y, str) for annotation.
+bounds, boundspad : tuple or float, optional
+    y-axis (or x-axis) limits and padding.
+legend, legend_title : list or str, optional
+    Legend labels and title.
+
+"""
+
+
 
 import numpy as np
 
@@ -24,6 +55,20 @@ def LinePlot(inp,
                 xticklabel = None, 
                 figsize = (5,5), fontsize = 10, ax = None): 
     
+    """
+    Plots one or more lines with optional fill, bounds, and legend.
+
+    Args:
+        inp (list or np.ndarray): List of arrays or arrays to plot as lines.
+        fill (bool, optional): Whether to fill under the curve.
+        fillbetween (float, optional): Alpha for fill between two curves.
+        hatch (str, optional): Hatch pattern for fill.
+        xticklabel (list, optional): Custom x-tick labels.
+        hline (float, optional): y-value for horizontal line.
+        cmap (str, optional): Colormap name for automatic coloring.
+
+    """
+
     plt.rc('font', size=fontsize)
     titlesize = int(fontsize + fontsize * 0.2)
     if ax is None: fig, ax = plt.subplots(figsize = figsize)
@@ -76,6 +121,19 @@ def GridPlot(inp, bounds = (None, None), boundspad = None,
                 xtick_rotation = None, ytick_rotation = None, 
                 figsize = (5,5), fontsize = 10, ax = None): 
     
+    """
+    Displays a 2D array as an image (heatmap) with optional colorbar and axis labels.
+
+    Args:
+        inp (np.ndarray): 2D array to display as an image.
+        bounds (tuple, optional): (vmin, vmax) for color scaling.
+        boundspad (float, optional): Padding to add/subtract from bounds.
+        cmap (str, optional): Colormap name.
+        colorbar (bool, optional): Whether to show a colorbar.
+        xticklabel, yticklabel (list, optional): Custom tick labels for axes.
+        xtick_rotation, ytick_rotation (int, optional): Rotation for tick labels.
+    """
+    
     plt.rc('font', size=fontsize)
     titlesize = int(fontsize + fontsize * 0.2)
     if ax is None: fig, ax = plt.subplots(figsize = figsize)
@@ -110,6 +168,19 @@ def ScaHistPlot(inp, bins = 50,
                 line = False, linewidth = 1.0, 
                 xlabel = None, ylabel = None, suptitle = None, text = None,
                 figsize = (5,5), fontsize = 10, ax = None): 
+    
+    """
+    Scatter plot with marginal histograms for two variables.
+
+    Args:
+        inp (list of np.ndarray): [x, y] (and optionally weights).
+        bins (int, optional): Number of histogram bins.
+        switch (bool, optional): If True, swaps x and y axes.
+        sharebounds (bool, optional): If True, use same bounds for x and y.
+        pointsize (int, optional): Size of scatter points.
+        line (bool, optional): If True, plot y=x line.
+        linewidth (float, optional): Width of the line.
+    """
     
     #inp are [x,y]
     x, y = (1, 0) if switch else (0, 1)
@@ -176,6 +247,22 @@ def ScaPlot(inp, switch = False,
             pointsize = 10, color = 'maroon', alpha = 0.5, line = False, 
             xlabel = None, ylabel = None, suptitle = None, text = None,
             figsize = (5,5), fontsize = 10, ax = None): 
+    
+    """
+    Simple scatter plot for two variables, with optional color/size encoding.
+
+    Args:
+        inp (list of np.ndarray): [x, y] (and optionally weights).
+        switch (bool, optional): If True, swaps x and y axes.
+        sharebounds (bool, optional): If True, use same bounds for x and y.
+        pointsize (int, optional): Size of scatter points.
+        line (bool, optional): If True, plot y=x line.
+
+        For other common arguments, see module docstring.
+
+    Returns:
+        matplotlib.axes.Axes: The axes with the plot.
+    """
     
     #bounds is only list from now on #jan 5 24
     
