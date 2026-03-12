@@ -8,6 +8,8 @@ import poseigen_seaside.basics as se
 import torch                                #!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 import torch.nn as nn
 
+import warnings
+
 
 
 def MeanExpo(inp, expo = 2, root = False):
@@ -21,8 +23,18 @@ def MeanExpo(inp, expo = 2, root = False):
 
     return ME
 
+
+
+def MeanVariance(inp, alpha = 1, ddof = 0): 
+    meano = inp.mean()
+    var = ((inp - meano) ** 2).sum() / ((len(inp)) + ddof)
+    std = var ** 0.5
+    return inp.mean() + alpha * std
+
+
+
 def WeightsAdjuster(inp1, weights):
-    if weights == None or isinstance(weights, int): 
+    if weights is None or isinstance(weights, int): 
         weights = 1
     return weights
 
@@ -30,10 +42,12 @@ def AError(inp1, inp2, weights = None, mean = True,
            revbase = None, revpseudo = False, 
            revsqrt = None, 
            rel = False, 
-           expo = 2, root = False, weightbefore = False): 
+           expo = 2, root = False, weightbefore = False, weightsum = True, use_weights = True): 
     
     #added revbase and revpseudo to reverse log transformations.
     #Applies to both inputs. 
+
+    if use_weights == False: weights = None
 
     if revbase != None:
         inp1, inp2 = [(revbase ** x) - revpseudo for x in [inp1, inp2]]
@@ -52,7 +66,10 @@ def AError(inp1, inp2, weights = None, mean = True,
     AE = w * (e ** expo)
     
     if mean == True:
-        if isinstance(w, int) == False: AE = AE.sum() / w.sum()
+        if isinstance(w, int) == False: 
+            if weightsum: wsum = w.sum()
+            else: wsum = 1
+            AE = AE.sum() / wsum
         else: AE = AE.mean()
 
         if root: AE = AE**(1/2)
@@ -81,15 +98,41 @@ def ZError(inp1, inp2, std = 1,
     return AE
 
 
+# def Correlation(inp1, inp2, weights = None, inverse = False): 
+
+#     weights = WeightsAdjuster(inp1, weights)
+#     if isinstance(weights, int): cor = np.corrcoef(inp1,inp2)[0, 1]
+#     else: 
+#         def m(inp1, weights): return np.sum(inp1 * weights) / np.sum(weights)
+#         def cov(inp1, inp2, weights): return np.sum(weights * (inp1 - m(inp1, weights)) * (inp2 - m(inp2, weights))) / np.sum(weights)
+#         cor = cov(inp1, inp2, weights) / np.sqrt(cov(inp1, inp1, weights) * cov(inp2, inp2, weights))
+#     return cor if inverse == False else 1/cor
+
 def Correlation(inp1, inp2, weights = None, inverse = False): 
 
     weights = WeightsAdjuster(inp1, weights)
-    if isinstance(weights, int): cor = np.corrcoef(inp1,inp2)[0, 1]
+
+    is_torch = isinstance(inp1, torch.Tensor) or isinstance(inp2, torch.Tensor) or isinstance(weights, torch.Tensor)
+    xp = torch if is_torch else np
+
+    if isinstance(weights, int):
+        if is_torch:
+            x = inp1.flatten()
+            y = inp2.flatten()
+            mx = xp.mean(x)
+            my = xp.mean(y)
+            cov = xp.mean((x - mx) * (y - my))
+            cor = cov / (xp.sqrt(xp.mean((x - mx) ** 2)) * xp.sqrt(xp.mean((y - my) ** 2)))
+        else:
+            cor = np.corrcoef(inp1, inp2)[0, 1]
     else: 
-        def m(inp1, weights): return np.sum(inp1 * weights) / np.sum(weights)
-        def cov(inp1, inp2, weights): return np.sum(weights * (inp1 - m(inp1, weights)) * (inp2 - m(inp2, weights))) / np.sum(weights)
-        cor = cov(inp1, inp2, weights) / np.sqrt(cov(inp1, inp1, weights) * cov(inp2, inp2, weights))
+        def m(inp1, weights): return xp.sum(inp1 * weights) / xp.sum(weights)
+        def cov(inp1, inp2, weights): 
+            return xp.sum(weights * (inp1 - m(inp1, weights)) * (inp2 - m(inp2, weights))) / xp.sum(weights)
+        cor = cov(inp1, inp2, weights) / xp.sqrt(cov(inp1, inp1, weights) * cov(inp2, inp2, weights))
+
     return cor if inverse == False else 1/cor
+
 
 
 metrics_smallest = {
@@ -219,102 +262,285 @@ def PhiError(inp1, inp2, std = 1,
 
 #------------------- BETA PRIME STUFF ---------------------
 
-def BetaPrime_Mode(alpha, beta, pseudo = 0):
-    mox = (alpha - 1) / (beta + 1)
-    bb = alpha <= 1
-    mox[bb] = pseudo
-    return mox
+# def BetaPrime_Mode(alpha, beta, pseudo = 0):
+#     mox = (alpha - 1) / (beta + 1)
+#     bb = alpha <= 1
+#     mox[bb] = pseudo
+#     return mox
 
-def Beta2BetaPrime(x, alpha, beta): 
-    return ((1+x)**(-alpha-beta)) / ((1-x) ** (beta - 1))
+# def Beta2BetaPrime(x, alpha, beta): 
+#     return ((1+x)**(-alpha-beta)) / ((1-x) ** (beta - 1))
 
-def BetaPrime_PDF_sci(x, alpha, beta): 
-    return scipy.stats.betaprime.pdf(x, alpha, beta)
+# def BetaPrime_PDF_sci(x, alpha, beta): 
+#     return scipy.stats.betaprime.pdf(x, alpha, beta)
 
-################################
+# ################################
 
-def LogBetaFunction_pyt(alpha, beta):
-    #alpha and beta need to be tensors!!!!!!!! 
-    return torch.lgamma(alpha) + torch.lgamma(beta) - torch.lgamma(alpha + beta)
+# def LogBetaFunction_pyt(alpha, beta):
+#     #alpha and beta need to be tensors!!!!!!!! 
+#     return torch.lgamma(alpha) + torch.lgamma(beta) - torch.lgamma(alpha + beta)
 
-def BetaFunction_pyt(alpha, beta):
-    e = math.e
-    return e ** LogBetaFunction_pyt(alpha, beta)
+# def BetaFunction_pyt(alpha, beta):
+#     e = math.e
+#     return e ** LogBetaFunction_pyt(alpha, beta)
 
-def BetaPrime_PDF_pyt(x, alpha, beta):
+# def BetaPrime_PDF_pyt(x, alpha, beta):
  
-    # NEED TO WORK IN LOG HERE @@@@@@@@@@@@@@@@@@@@@@
+#     # NEED TO WORK IN LOG HERE @@@@@@@@@@@@@@@@@@@@@@
 
-    psu = 1e-10 #THIS IS A TEMPORARY VALUE
+#     psu = 1e-10 #THIS IS A TEMPORARY VALUE
 
-    helper_tensor = torch.ones(x.shape)
-    helper_tensor[x < 0] = 0
+#     helper_tensor = torch.ones(x.shape)
+#     helper_tensor[x < 0] = 0
 
-    devo = x.get_device()
-    if devo > -1: helper_tensor = helper_tensor.to(devo)
+#     devo = x.get_device()
+#     if devo > -1: helper_tensor = helper_tensor.to(devo)
 
-    x2 = (x * helper_tensor) + psu
+#     x2 = (x * helper_tensor) + psu
 
-    p1a = torch.log(x2) * (alpha - 1)
-    p1b = torch.log(1 + x2) * (-alpha-beta)
-    p2 = LogBetaFunction_pyt(alpha, beta)
+#     p1a = torch.log(x2) * (alpha - 1)
+#     p1b = torch.log(1 + x2) * (-alpha-beta)
+#     p2 = LogBetaFunction_pyt(alpha, beta)
 
-    e = math.e
+#     e = math.e
 
-    rex = (p1a + p1b - p2)
+#     rex = (p1a + p1b - p2)
     
-    ret = e ** rex
-    ret = ret * helper_tensor
+#     ret = e ** rex
+#     ret = ret * helper_tensor
 
-    return ret
+#     return ret
 
-def BetaPrime_Rel(inp, alpha, beta, mo = None, pyt = False, pseudo = 0):
+# def BetaPrime_Rel(inp, alpha, beta, mo = None, pyt = False, pseudo = 0):
 
-    #---------------------------------------
+#     #---------------------------------------
 
-    if mo is None: mo = BetaPrime_Mode(alpha, beta)
+#     if mo is None: mo = BetaPrime_Mode(alpha, beta)
 
-    inp, alpha, beta, mo = [x + pseudo for x in [inp, alpha, beta, mo]]
+#     inp, alpha, beta, mo = [x + pseudo for x in [inp, alpha, beta, mo]]
 
-    #---------------------------------------
+#     #---------------------------------------
 
-    if pyt:
-        maxo = BetaPrime_PDF_pyt(mo, alpha = alpha, beta = beta)
-        betaprimo= BetaPrime_PDF_pyt(inp, alpha = alpha, beta = beta)
+#     if pyt:
+#         maxo = BetaPrime_PDF_pyt(mo, alpha = alpha, beta = beta)
+#         betaprimo= BetaPrime_PDF_pyt(inp, alpha = alpha, beta = beta)
 
-    else: 
-        maxo = BetaPrime_PDF_sci(mo, alpha, beta)
-        betaprimo= BetaPrime_PDF_sci(inp, alpha, beta)
+#     else: 
+#         maxo = BetaPrime_PDF_sci(mo, alpha, beta)
+#         betaprimo= BetaPrime_PDF_sci(inp, alpha, beta)
     
-    return betaprimo / maxo
+#     return betaprimo / maxo
 
-def BetaPrime_CompRel(inp, alpha, beta, mo = None, pyt = False, pseudo = 0):
+# def BetaPrime_CompRel(inp, alpha, beta, mo = None, pyt = False, pseudo = 0):
 
-    dxo = BetaPrime_Rel(inp, alpha, beta, mo = mo, pyt = pyt, pseudo = pseudo)
+#     dxo = BetaPrime_Rel(inp, alpha, beta, mo = mo, pyt = pyt, pseudo = pseudo)
     
-    return 1 - dxo
+#     return 1 - dxo
 
-def CR_BetaPrime(inp1, inp2, var, pyt = False, pseudo = 0): 
+# def CR_BetaPrime(inp1, inp2, var, pyt = False, pseudo = 0): 
 
-    # VAR NEEDS TO BE SOMETHING!!!!!!!!!!!!!!!!!!!!!
+#     # VAR NEEDS TO BE SOMETHING!!!!!!!!!!!!!!!!!!!!!
 
-    if pyt:
+#     if pyt:
 
-        alpha1 = torch.select(var, dim = -1, index = 0)
-        alpha2 = torch.select(var, dim = -1, index = 1)
+#         alpha1 = torch.select(var, dim = -1, index = 0)
+#         alpha2 = torch.select(var, dim = -1, index = 1)
 
-    else: 
+#     else: 
 
         
 
-        # alpha1 = np.take_along_axis(var, indices = 0, axis = -1)
-        # alpha2 = np.take_along_axis(var, indices = 1, axis = -1)
+#         # alpha1 = np.take_along_axis(var, indices = 0, axis = -1)
+#         # alpha2 = np.take_along_axis(var, indices = 1, axis = -1)
 
-        alpha1 = var[:, :, :, :, 0]
-        alpha2 = var[:, :, :, :, 1]
+#         alpha1 = var[:, :, :, :, 0]
+#         alpha2 = var[:, :, :, :, 1]
     
-    return BetaPrime_CompRel(inp1, alpha = alpha1, beta = alpha2, mo = inp2, 
-                             pyt = pyt, pseudo = pseudo)
+#     return BetaPrime_CompRel(inp1, alpha = alpha1, beta = alpha2, mo = inp2, 
+#                              pyt = pyt, pseudo = pseudo)
+
+def Gamma_params(mean, std, pseudo = 1e-10):
+    """
+    Determine Gamma distribution parameters (alpha, theta) from mean and std.
+    
+    For Gamma(alpha, theta) with shape-scale parameterization:
+    - mean = alpha * theta
+    - variance = alpha * theta^2
+    - std = sqrt(variance) = sqrt(alpha) * theta
+    
+    Parameters
+    ----------
+    mean : array-like or tensor
+        Mean of the distribution
+    std : array-like or tensor
+        Standard deviation of the distribution
+    pseudo : float, optional
+        Small value to prevent division by zero
+        
+    Returns
+    -------
+    tuple of (alpha, theta)
+        Shape and scale parameters
+    """
+    xp = np if isinstance(mean, np.ndarray) else torch
+    
+    mean = mean + pseudo
+    std = std + pseudo
+    
+    # From the relationships:
+    # variance = std^2 = alpha * theta^2
+    # mean = alpha * theta
+    # Therefore: theta = variance / mean = std^2 / mean
+    # And: alpha = mean / theta = mean^2 / std^2
+    
+    variance = std ** 2
+    theta = variance / mean
+    alpha = mean / theta
+    
+    return alpha, theta
+
+
+def Gamma_mode(alpha, theta, pseudo = 1e-10):
+    xp = np if isinstance(alpha, np.ndarray) else torch
+    
+    mode = xp.where(alpha > 1, theta * (alpha - 1) , 0.0)
+
+    return mode
+
+
+#------------------- GENERALIZED (SCALED) BETA PRIME STUFF ---------------------
+
+def GB2_Mode(alpha1, theta1, alpha2, theta2, pseudo = 1e-10):
+    xp = np if isinstance(alpha1, np.ndarray) else torch
+    
+    alpha1, theta1, alpha2, theta2 = [x + pseudo for x in [alpha1, theta1, alpha2, theta2]]
+
+    scale = theta1 / theta2
+    mode = xp.where(alpha1 > 1, scale * (alpha1 - 1) / (alpha2 + 1), 0.0)
+
+    return mode
+
+
+def GB2_PDF(inp, alpha1, theta1, alpha2, theta2, pseudo = 1e-10, max_log_exp = 30):
+    """
+    PDF of Z = X/Y where
+    X ~ Gamma(alpha1, theta1), Y ~ Gamma(alpha2, theta2),
+    with shape-scale parameterization.
+
+    Works with NumPy arrays or PyTorch tensors.
+
+    Parameters
+    ----------
+    x : array-like or tensor
+        Evaluation points (must be > 0).
+    alpha1, theta1, alpha2, theta2 : float or array-like/tensor
+        Parameters of the two gammas.
+
+    Returns
+    -------
+    array-like or tensor
+        PDF values at x.
+    """
+
+    alpha1, theta1, alpha2, theta2 = [x + pseudo for x in [alpha1, theta1, alpha2, theta2]]
+
+    if isinstance(inp, np.ndarray):
+        xp = np
+        logB = scipy.special.betaln(alpha1, alpha2)
+        inp_pos = np.maximum(inp, 0) + pseudo
+    elif isinstance(inp, torch.Tensor):
+        xp = torch
+        logB = logB = torch.lgamma(alpha1) + torch.lgamma(alpha2) - torch.lgamma(alpha1 + alpha2)
+        #inp_pos = torch.clamp(inp, min=0.0) + pseudo
+        inp_pos = inp
+
+    # Scale factor
+    c = theta1 / theta2
+
+
+    log_pdf = -logB - alpha1*xp.log(c) + (alpha1-1)*xp.log(inp_pos) - (alpha1+alpha2)*xp.log1p(inp_pos/c)
+
+    # if xp is np: log_pdf = np.clip(log_pdf, a_min=None, a_max=max_log_exp)
+    # else: log_pdf = torch.clamp(log_pdf, min=None, max=max_log_exp)
+
+    pdf = xp.exp(log_pdf)
+
+    return pdf #xp.where(inp >= 0, pdf, 0.0)
+
+#----------------------------
+
+from torch_betainc import betainc
+
+def GB2_CDF(inp, alpha1, theta1, alpha2, theta2): 
+    z = (theta2 * inp) / (theta1 + theta2 * inp + 1e-8)
+    if isinstance(inp, torch.Tensor): 
+        z = torch.where(torch.isnan(z) | torch.isinf(z), torch.zeros_like(z), z)
+        #print(betainc(alpha1, alpha2, torch.clamp(z, 0, 1)))
+        return betainc(alpha1, alpha2, torch.clamp(z, 0, 1))
+    else: 
+        return scipy.special.betainc(alpha1, alpha2, np.clip(z, 0, 1))
+
+#----------------------------
+
+
+
+
+def GB2_Rel(inp, alpha1, theta1, alpha2, theta2, mo = None, pseudo = 1e-10): 
+
+    # inp needs to be atleast 0
+
+    argoz = {'alpha1': alpha1, 'alpha2': alpha2, 'theta1': theta1, 'theta2': theta2}
+    
+    if mo is None: mo = GB2_Mode(**argoz, pseudo = pseudo)
+
+    maxo = GB2_PDF(mo, **argoz, pseudo = pseudo)
+
+    pdfo = GB2_PDF(inp, **argoz, pseudo = pseudo)
+
+    result = pdfo / (maxo + pseudo)
+
+    return result
+
+
+def GB2_CompRel(inp, alpha1, theta1, alpha2, theta2, mo = None, pseudo = 1e-10):
+    dxo = GB2_Rel(inp, 
+                  alpha1 = alpha1, theta1 = theta1,
+                  alpha2 = alpha2, theta2 = theta2, 
+                  mo = mo, pseudo = pseudo)
+    result = 1 - dxo
+    return result
+
+
+def CR_GB2(inp1, inp2, var, pseudo = 1e-10): 
+
+    alpha1, theta1, alpha2, theta2 = [var[..., x] for x in range(4)]
+    result = GB2_CompRel(inp1, 
+                       alpha1 = alpha1, theta1 = theta1,
+                       alpha2 = alpha2, theta2 = theta2, 
+                       mo = inp2, pseudo = pseudo)
+    
+    return result
+
+
+
+def GB2_Comp(inp, alpha1, theta1, alpha2, theta2, pseudo = 1e-10): 
+
+    # inp needs to be atleast 0
+
+    argoz = {'alpha1': alpha1, 'alpha2': alpha2, 'theta1': theta1, 'theta2': theta2}
+    pdfo = GB2_PDF(inp, **argoz, pseudo = pseudo)
+
+    return 1-pdfo
+
+def C_GB2(inp1, inp2, var, pseudo = 1e-10):
+
+    alpha1, theta1, alpha2, theta2 = [var[..., x] for x in range(4)]
+
+    return GB2_Comp(inp1, 
+                       alpha1 = alpha1, theta1 = theta1,
+                       alpha2 = alpha2, theta2 = theta2, 
+                       pseudo = pseudo)
+
 
 
 
@@ -322,7 +548,7 @@ def CR_BetaPrime(inp1, inp2, var, pyt = False, pseudo = 0):
 #------------- DEVIATION ERROR ----------------
 
 def DeviaError(inp1, inp2, std = 1,
-               comprel_mode = [CR_BetaPrime, {}],
+               comprel_mode = [CR_GB2, {}],
                    scalefactor = 1, pseudo = 0,
                    pyt = False,
                    weights = None, mean = True,
@@ -335,12 +561,15 @@ def DeviaError(inp1, inp2, std = 1,
     # INP1 IS PREDICTION, INP2 IS ACTUAL !!!!!!!!!!!!!! VERY IMPORTANT ORDER. 
 
 
-    comprel_mode[1].update({'pyt': pyt})
-
     if pseudo is None: pseudo = 0
     
     if expo != 2: root = False
     weights = WeightsAdjuster(inp1, weights)
+
+    if pyt: 
+
+        device = inp1.get_device()
+        scalefactor = torch.tensor(scalefactor).to(device)
 
     inp1_m, inp2_m = [(inp * scalefactor)
                         for inp in [inp1, inp2]]
@@ -369,3 +598,116 @@ def DeviaError(inp1, inp2, std = 1,
         if root: AE = AE**(1/2)
     
     return AE
+
+
+
+
+def GB2_pinball(pred, target, 
+                std = None, weights = None, 
+                scalefactor = 1, mean = True, expo = 2, 
+                pseudo = 1e-12): 
+    
+    if isinstance(target, torch.Tensor):
+        device = target.get_device()
+        scalefactor = torch.tensor(scalefactor).to(device)
+    
+    pred = pred * scalefactor
+    
+    # # Apply ReLU (clip to minimum 0) and add pseudo
+    # if isinstance(pred, torch.Tensor):
+    #     pred = torch.clamp(pred, min=0.0) + pseudo
+    # else:
+    #     pred = np.maximum(pred, 0.0) + pseudo
+    
+    weights = WeightsAdjuster(pred, weights)
+
+    alpha1, theta1, alpha2, theta2 = [target[..., x] for x in range(4)]
+
+    cdf_at_pred = GB2_CDF(pred, alpha1, theta1, alpha2, theta2)
+
+    e4 = abs(0.5 - cdf_at_pred)
+
+    AE = weights * (e4 **expo)
+
+    if mean: AE = AE.mean()
+
+    return AE
+
+
+
+
+
+def ProperDeviaError(inp1, inp2, std = 1,
+               comprel_mode = [CR_GB2, {}],
+                   scalefactor = 1, pseudo = 0,
+                   pyt = False,
+                   weights = None, mean = True,
+                   expo = 2, root = False, weightbefore = False, 
+
+                   modif_mode = None, usestd = True, ##############               
+                   ): 
+    
+
+    ''' THIS IS THE PROPER SCORE VERSION OF DEVIAERROR '''
+    # NEW MOD: MVOED PSEUDO FOR COMPREL MODE. 
+    # INP1 IS PREDICTION, INP2 IS ACTUAL !!!!!!!!!!!!!! VERY IMPORTANT ORDER. 
+
+
+    if pseudo is None: pseudo = 0
+    
+    if expo != 2: root = False
+    weights = WeightsAdjuster(inp1, weights)
+
+    if pyt: 
+
+        device = inp1.get_device()
+        scalefactor = torch.tensor(scalefactor).to(device)
+
+    inp1_m, inp2_m = [(inp * scalefactor)
+                        for inp in [inp1, inp2]]
+
+    if modif_mode is not None: 
+        inp1_m, inp2_m = [modif_mode[0](inpx, **modif_mode[1]) 
+                          for inpx in [inp1_m, inp2_m]]
+    
+    #--------------------------------------------------
+
+    comprelprob = comprel_mode[0](inp1_m, inp2_m, std, 
+                                  pseudo = pseudo,
+                                  **comprel_mode[1]) if usestd else 1
+
+    #--------------------------------------------------
+    
+    
+    e4 = comprelprob                                                            #@@@@@@@@@@@@@@@@@@@@@@@@@@@
+    
+    AE = (weights * e4)**expo if weightbefore else weights * (e4 **expo)
+    
+    if mean is True:  
+        AE = AE.mean()
+        if root: AE = AE**(1/2)
+    
+    return AE
+
+
+
+
+
+
+
+
+
+def NegativeCorrelation(inp1, inp2, std = 1, weights = None, use_weights = True): 
+
+    '''std is placeholder'''
+    
+    #added revbase and revpseudo to reverse log transformations.
+    #Applies to both inputs. 
+
+    if use_weights == False: weights = None
+    w = WeightsAdjuster(inp1, weights)
+
+    negcor = -1 * Correlation(inp1 = inp1, inp2 = inp2, weights = w)
+
+
+    return negcor

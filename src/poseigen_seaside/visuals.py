@@ -47,16 +47,16 @@ linep_args = {'fill': False, 'fillbetween': None, 'hatch': '/',
                 'figsize': (5,5), 'fontsize': 10, 'ax': None}
 
 def LinePlot(inp, 
-             fill = False, fillbetween = None, hatch = '/', 
-                bounds = None, boundspad = None, 
-                legend = None, legend_title = None,
-                color = None, cmap = 'viridis', alpha = 1.0, hline = None, 
-                xlabel = None, ylabel = None, suptitle = None, text = None, 
-                xticklabel = None, 
-                figsize = (5,5), fontsize = 10, ax = None): 
+             fill=False, fillbetween=None, hatch='/', 
+             bounds=None, boundspad=None, 
+             legend=None, legend_title=None,
+             color=None, cmap='viridis', alpha=1.0, hline=None, 
+             xlabel=None, ylabel=None, suptitle=None, text=None, 
+             xticklabel=None, 
+             figsize=(5,5), fontsize=10, ax=None, err=None, linewidth=1.5):  # Added linewidth parameter
     
     """
-    Plots one or more lines with optional fill, bounds, and legend.
+    Plots one or more lines with optional fill, bounds, legend, and error bars.
 
     Args:
         inp (list or np.ndarray): List of arrays or arrays to plot as lines.
@@ -66,16 +66,19 @@ def LinePlot(inp,
         xticklabel (list, optional): Custom x-tick labels.
         hline (float, optional): y-value for horizontal line.
         cmap (str, optional): Colormap name for automatic coloring.
-
+        err (list or np.ndarray, optional): Error values for each line. Must match the shape of `inp`.
+        linewidth (float, optional): Thickness of the lines. Default is 1.5.
     """
 
     plt.rc('font', size=fontsize)
     titlesize = int(fontsize + fontsize * 0.2)
-    if ax is None: fig, ax = plt.subplots(figsize = figsize)
+    if ax is None: 
+        fig, ax = plt.subplots(figsize=figsize)
     
-    if isinstance(inp, list) == False and len(inp.shape) < 2: 
+    if not isinstance(inp, list) and len(inp.shape) < 2: 
         inp = [inp]
-        if color is not None and isinstance(color, list) == False: color = [color]
+        if color is not None and not isinstance(color, list): 
+            color = [color]
     li = len(inp)
     lx = len(inp[0])
     
@@ -84,38 +87,53 @@ def LinePlot(inp,
     if color is None: 
         color = [plt.get_cmap(cmap, li + h + fb)(i) for i in range(li + h + fb)]
 
-    for ik,k in enumerate(inp):
-        if isinstance(k, list): ax.plot(*k, alpha = alpha, color = color[ik])
-        else: ax.plot(k, alpha = alpha, color = color[ik])
-        if fill is not False: ax.fill_between(np.arange(lx), fill, k, color = color[ik], alpha = alpha)
+    for ik, k in enumerate(inp):
+        if isinstance(k, list): 
+            ax.plot(*k, alpha=alpha, color=color[ik], linewidth=linewidth)  # Added linewidth
+        else: 
+            ax.plot(k, alpha=alpha, color=color[ik], linewidth=linewidth)  # Added linewidth
+            if err is not None:
+                ax.fill_between(np.arange(lx), k - err[ik], k + err[ik], color=color[ik], alpha=alpha * 0.3)
+        if fill is not False: 
+            ax.fill_between(np.arange(lx), fill, k, color=color[ik], alpha=alpha)
     
     if fillbetween is not None: 
         al = fillbetween if isinstance(fillbetween, float) else 0.5
-        ax.fill_between(np.arange(lx), *inp, color = color[-1], alpha = al, hatch = hatch)
+        ax.fill_between(np.arange(lx), *inp, color=color[-1], alpha=al, hatch=hatch)
     
     if bounds is not None: 
-        if isinstance(bounds, int): bounds = (0, bounds)
+        if isinstance(bounds, int): 
+            bounds = (0, bounds)
         ax.set_ylim(bounds)
     
-    if hline is not None: ax.axhline(hline, ls = '--', color = color[len(inp)])
+    if hline is not None: 
+        ax.axhline(hline, ls='--', color=color[len(inp)], linewidth=linewidth)  # Added linewidth
     
-    if xlabel is not None: ax.set_xlabel(xlabel, fontsize=fontsize)
-    if ylabel is not None: ax.set_ylabel(ylabel, fontsize=fontsize)
+    if xlabel is not None: 
+        ax.set_xlabel(xlabel, fontsize=fontsize)
+    if ylabel is not None: 
+        ax.set_ylabel(ylabel, fontsize=fontsize)
     
     if xticklabel is not None: 
-        ax.set_xticks(np.linspace(0, lx-1, len(xticklabel)), labels = [])
-        ax.set_xticklabels(xticklabel, fontsize = fontsize)
+        ax.set_xticks(np.linspace(0, lx-1, len(xticklabel)), labels=[])
+        ax.set_xticklabels(xticklabel, fontsize=fontsize)
     
-    if legend is not None: ax.legend(legend, title = legend_title)
-        
+    if legend is not None: 
+        ax.legend(legend, title=legend_title)
     
-    if text is not None: ax.text(*text)
-    if suptitle is not None: ax.set_title(suptitle, size = titlesize, fontweight='bold')
+    if text is not None: 
+        ax.text(*text)
+    if suptitle is not None: 
+        ax.set_title(suptitle, size=titlesize, fontweight='bold')
     
     return ax
 
+
+
+
 def GridPlot(inp, bounds = (None, None), boundspad = None, 
                 cmap = 'viridis', alpha = 1.0, colorbar = False, 
+                cbar_title = None,
                 xlabel = None, ylabel = None, suptitle = None, 
                 xticklabel = None, yticklabel = None, 
                 xtick_rotation = None, ytick_rotation = None, 
@@ -130,6 +148,7 @@ def GridPlot(inp, bounds = (None, None), boundspad = None,
         boundspad (float, optional): Padding to add/subtract from bounds.
         cmap (str, optional): Colormap name.
         colorbar (bool, optional): Whether to show a colorbar.
+        cbar_title (str, optional): Label/title for the colorbar.
         xticklabel, yticklabel (list, optional): Custom tick labels for axes.
         xtick_rotation, ytick_rotation (int, optional): Rotation for tick labels.
     """
@@ -143,8 +162,12 @@ def GridPlot(inp, bounds = (None, None), boundspad = None,
     
     g = ax.imshow(inp, vmin = bounds[0], vmax = bounds[1], cmap = cmap)
     
-    if xticklabel is not None: 
-        ax.set_xticks(np.linspace(0, inp.shape[1]-1, len(xticklabel)))
+    if xticklabel is not None:
+        if len(xticklabel) == 2:
+            # place two labels at image edges (left/right)
+            ax.set_xticks([-0.5, inp.shape[1] - 0.5])
+        else:
+            ax.set_xticks(np.linspace(0, inp.shape[1]-1, len(xticklabel)))
 
         ax.set_xticklabels(xticklabel, fontsize = fontsize, rotation = xtick_rotation)
     
@@ -152,7 +175,10 @@ def GridPlot(inp, bounds = (None, None), boundspad = None,
         ax.set_yticks(np.linspace(0, inp.shape[0]-1, len(yticklabel)))
         ax.set_yticklabels(yticklabel, fontsize = fontsize, rotation = ytick_rotation)
     
-    if colorbar == True: plt.colorbar(g, ax=ax) 
+    if colorbar == True:
+        cbar = plt.colorbar(g, ax=ax)
+        if cbar_title is not None:
+            cbar.set_label(cbar_title, fontsize=fontsize)
     
     if xlabel is not None: ax.set_xlabel(xlabel, fontsize=fontsize)
     if ylabel is not None: ax.set_ylabel(ylabel, fontsize=fontsize)
@@ -160,7 +186,6 @@ def GridPlot(inp, bounds = (None, None), boundspad = None,
     if suptitle is not None: ax.set_title(suptitle, size = titlesize, fontweight='bold')
     
     return g
-
 def ScaHistPlot(inp, bins = 50,
                 switch = False,
                 bounds = (None, None), sharebounds = False, boundspad = None, 
@@ -330,7 +355,7 @@ def ScaPlot(inp, switch = False,
     if xbounds is not None: ax.set_xlim(*xbounds)
     if ybounds is not None: ax.set_ylim(*ybounds)
     
-    if line == True: ax.plot(inp[0], inp[0], 'm')       
+    if line == True: ax.plot(xbounds, xbounds, 'm--', )       
     
     if text is not None: ax.text(*text)
     

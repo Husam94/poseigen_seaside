@@ -9,6 +9,12 @@ from denseweight import DenseWeight
 from tqdm import tqdm
 import urllib
 
+from scipy.interpolate import interp1d
+
+import concurrent.futures
+
+import torch
+
 ####################################################################
 
 def PickleDump(inp, pathname):
@@ -19,18 +25,23 @@ def PickleLoad(pathname):
     if pathname.endswith('.p') is not True: pathname = pathname + '.p'
     return pickle.load(open(pathname, 'rb'))
 
-def NewFolder(pathname, ext = None): 
-    #Makes a folder if there isnt one and returns the newpathname to use in folder form 
+def ensure_dir(path):
+    """Create all directories in the given path if they do not exist."""
+    os.makedirs(path, exist_ok=True)
+    return path
 
-    npn = pathname + '_' + ext if ext is not None and pathname is not None else pathname 
-    
+def NewFolder(pathname, ext=None):
+    # Makes a folder if there isn't one and returns the new pathname to use in folder form
+
+    npn = pathname + '_' + ext if ext is not None and pathname is not None else pathname
+
     if pathname is not None:
-        if os.path.isdir(npn) is False: 
-            os.mkdir(npn)
+        os.makedirs(npn, exist_ok=True)  # Safe for multiprocessing
         npt = npn + '/'
         newpathname = npt if npt.startswith('./') or npt.startswith('/') else './' + npt
-    else: newpathname = None
-        
+    else:
+        newpathname = None
+
     return newpathname
 
 def Rounder(x, base=1):
@@ -73,13 +84,17 @@ def Cutter(inp, idx):
 def Reciprocal(inp, pseudo = False): 
     return 1/(inp+pseudo)
 
+def Complement(inp, pseudo = False): 
+    return 1 - (inp + pseudo)
+
 def RobustScale(inp): 
     q25, q50, q75 = (np.percentile(inp, x) for x in [25, 50, 75])
     return (inp - q50) / (q75 - q25) 
 
-def RobustMean(inp, low = 25, high = 75): 
-    qL, qH = (np.percentile(inp, x) for x in [low, high])
-    return np.mean(inp[(inp > qL) * (inp < qH)])
+def RobustMean(inp, low=25, high=75, axis=None): 
+    qL, qH = np.percentile(inp, [low, high], axis=axis, keepdims=True)
+    mask = np.logical_and(inp > qL, inp < qH)  # Use logical_and for element-wise comparison
+    return np.mean(mask * inp, axis=axis)
 
 def RobustStd(inp, low = 25, high = 75, ddof = 0): 
     qL, qH = (np.percentile(inp, x) for x in [low, high])
@@ -109,6 +124,13 @@ def revlog(inp, base = math.e, pseudo = None):
     ps = 0 if pseudo == None else pseudo
     return (base ** inp) - pseudo
 
+def speclog(x, a, b, c, v):
+    # M(log(v + b*x)) ≈ a * log(v + b*x) + c
+    return a * np.log(v + b * x) + c
+
+def revspeclog(x, a, b, c, v): 
+    return (np.exp((x - c) / a) - v) / b
+
 
 def logmodules(inp, base = math.e):
     inp = np.array(inp)
@@ -122,6 +144,17 @@ def revlogmodules(inp, base = math.e):
     inp[inp<0] = 1 - math.e**(-(inp[inp<0]))
 
     return inp
+
+def softplus_func(x, b, d, C):
+    """
+    Softplus curve: ln(C + e^(b*x + d))
+    
+    Parameters:
+    - b: slope parameter
+    - d: offset parameter
+    - C: baseline constant
+    """
+    return np.log(C + np.exp(b * x + d))
 
 
 def SlidingWindowMean(inpx, inpy, winsize = 0.1, reso = 0.001): 
@@ -146,30 +179,258 @@ def SlidingWindowMean(inpx, inpy, winsize = 0.1, reso = 0.001):
     return winmids, np.array(mex)
 
 
-def WindowVal(inp1, inp2, 
-              mode1 = [np.mean, {}],  mode2 = [np.mean, {}],
-              win_size = 0.1, step = 0.01):
-    # This function slides across taking a window and applying a funciton over it. 
-    # returns (x, y) where x is the center of the window and y is the val on inp2
+# def WindowVal(inp1, inp2, 
+#               mode1 = [np.mean, {}],  mode2 = [np.mean, {}],
+#               win_size = 0.1, step = 0.01):
+#     # This function slides across taking a window and applying a funciton over it. 
+#     # returns (x, y) where x is the center of the window and y is the val on inp2
 
-    inp1_mi, inp1_ma = MinMax(inp1)
+#     inp1_mi, inp1_ma = MinMax(inp1)
+#     totrange = inp1_ma - inp1_mi
+#     winx = (win_size * totrange)
+#     stepx = step * totrange
+    
+#     startoz = np.arange(inp1_mi, inp1_ma-winx, stepx)
+
+#     inp1_ws, inp2_ws = [], []
+#     for few in startoz: 
+#         wer = np.where((inp1 > few) * (inp1 < few + winx))[0]
+#         inp1_w, inp2_w = [x[wer] for x in [inp1, inp2]]
+#         if mode1 is not None: inp1_w = mode1[0](inp1_w, **mode1[1])
+#         if mode2 is not None: inp2_w = mode2[0](inp2_w, **mode2[1])
+#         inp1_ws.append(inp1_w)
+#         inp2_ws.append(inp2_w)
+    
+#     return inp1_ws, inp2_ws
+
+
+def RollingWindows(inp1 = None, win_size = 0.05, step = 0.01, extended = True):
+
+    if inp1 is not None: inp1_mi, inp1_ma = MinMax(inp1)
+    else: inp1_mi, inp1_ma = 0, 1
+    
     totrange = inp1_ma - inp1_mi
-    winx = (win_size * totrange)
-    stepx = step * totrange
+    winx = win_size * totrange
     
-    startoz = np.arange(inp1_mi, inp1_ma-winx, stepx)
+    if step is None: 
 
-    inp1_ws, inp2_ws = [], []
-    for few in startoz: 
-        wer = np.where((inp1 > few) * (inp1 < few + winx))[0]
+        # Do Non overlap bins
+
+        num_windows = int(totrange / win_size)
+        winx = totrange / num_windows
+
+        startoz = np.linspace(inp1_mi, inp1_ma - winx, num_windows)
+        centers = startoz + winx / 2
+        endoz = startoz + winx
+    
+    else:
+
+        stepx = step * totrange
+
+        if extended:
+            num_windows = int(np.ceil((inp1_ma - inp1_mi) / stepx)) + 1
+            centers = np.linspace(inp1_mi, inp1_ma, num_windows)
+            startoz = centers - winx / 2
+            endoz = centers + winx / 2
+        else:
+            startoz = np.arange(inp1_mi, inp1_ma - winx, stepx)
+            centers = startoz + winx / 2
+            endoz = startoz + winx
+    
+    startoz[startoz < np.min(inp1)] = np.min(inp1)
+    endoz[endoz > np.max(inp1)] = np.max(inp1)
+
+    return centers, startoz, endoz
+
+
+    
+
+
+
+
+def RollingCount(inp1, startoz, endoz, prop = False): 
+    
+    lx = len(inp1) if prop else 1
+    
+    def count_window(st, en):
+        return np.sum((inp1 >= st) & (inp1 <= en)) / lx
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        counts = list(executor.map(count_window, startoz, endoz))
+
+    return counts
+
+
+def RollingVal(inp1, inp2, 
+              mode =[np.mean, {}],
+              win_size=0.1, step=0.01, extended=True):
+    """
+    Slides across inp1, applies a function over inp2 in each window.
+    Returns (centers, f(y)), where centers are window centers.
+    If extended=True, windows are centered from min to max, possibly including empty windows.
+    Parallelized over windows.
+    """
+
+    centers, startoz, endoz = RollingWindows(inp1 = inp1, win_size = win_size, step = step, extended = extended)
+
+
+    def process_window(st, en):
+        wer = np.where((inp1 >= st) & (inp1 <= en))[0]
         inp1_w, inp2_w = [x[wer] for x in [inp1, inp2]]
-        if mode1 is not None: inp1_w = mode1[0](inp1_w, **mode1[1])
-        if mode2 is not None: inp2_w = mode2[0](inp2_w, **mode2[1])
-        inp1_ws.append(inp1_w)
-        inp2_ws.append(inp2_w)
-    
-    return inp1_ws, inp2_ws
+        if mode is not None:
+            inp2_w = mode[0](inp2_w, **mode[1]) if len(inp2_w) > 0 else np.nan
+        return inp2_w
 
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        inp2_ws = list(executor.map(process_window, startoz, endoz))
+
+    return np.array(centers), np.array(inp2_ws)
+
+def RollingCount(inp1, startoz, endoz): 
+     
+    def count_window(st, en):
+        return np.sum((inp1 >= st) & (inp1 <= en))
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        counts = list(executor.map(count_window, startoz, endoz))
+
+    return counts
+
+def RollingDensity(inp1, win_size=0.1, step=0.01, extended=True, raw = False, 
+                   scalefac = None):
+    """
+    Slides across inp1, counts the number of observations in each window,
+    scales by the total number of observations, and fits a linear interpolation.
+    Returns the interpolation object: winden.predict(x)
+    """
+    if scalefac is None: 
+        centers, startoz, endoz = RollingWindows(inp1 = inp1, win_size = win_size, 
+                                                 step = step, extended = extended)
+    else: 
+        centers, startoz, endoz = RollingWindows_MT(inp = inp1, win_size = win_size, 
+                                                 step = step, extended = extended, 
+                                                 scalefac = scalefac)
+
+    counts = RollingCount(inp1, startoz, endoz)
+    counts = np.array(counts)
+
+    densities = counts if raw else  counts / len(inp1)
+    winden = interp1d(centers, densities, kind='linear', bounds_error=False, fill_value=0.0)
+    winden.predict = winden.__call__  # For API consistency
+
+    return winden
+
+
+def RollingBelong(inp1, win_size=0.1, step=0.01, extended=True):
+    """
+    For each value in inp1, determines which windows it belongs to.
+    Returns an integer array of shape (len(inp1), max_bins), filled with window indices or -1.
+    Parallelized over rows.
+    """
+    centers, startoz, endoz = RollingWindows(inp1 = inp1, win_size = win_size, step = step, extended = extended)
+
+    # Binary mask: shape (N, W)
+    inp1_col = inp1.reshape(-1, 1)
+    startoz_row = startoz.reshape(1, -1)
+    endoz_row = endoz.reshape(1, -1)
+    mask = ((inp1_col >= startoz_row) & (inp1_col <= (endoz_row)))
+
+    # Maximum bins a value can belong to
+    max_bins = int(np.ceil(win_size / step))
+
+    def get_bins(row):
+        bins = np.where(row)[0]
+        out = np.full(max_bins, -1, dtype=int)
+        out[:len(bins)] = bins
+        return out
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        result = np.array(list(executor.map(get_bins, mask)), dtype=int)
+
+    return result
+
+
+def Belong2Rolling(window_belong, return_counts = False):
+    """
+    Given WindowBelong output (shape (N, max_bins)), returns a list of arrays,
+    each containing the indices of inp1 that belong to each window.
+    Parallelized over windows.
+    """
+
+    is_torch = torch.is_tensor(window_belong)
+
+    num_windows = int(window_belong.max() + 1)
+
+    def get_indices(i):
+        if is_torch: return torch.where((window_belong == i).any(dim=1))[0]
+        else: return np.where((window_belong == i).any(axis=1))[0]
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        indices_list = list(executor.map(get_indices, range(num_windows)))
+    
+    if return_counts: indices_list = [len(x) for x in indices_list] 
+
+    return indices_list
+
+def RollingScaleFac(inp, mode = [tanh, {}], 
+                    win_size = 0.05, step = 0.01, extended = True,
+                    minobs = 10, start = 1, increm = 0.1): 
+    
+    '''Requires inp to be max scaled'''
+
+    if inp.max() > 1: 
+        print('FAILED: NOT MAX SCALED')
+        return
+    inpx = inp.reshape(-1)
+    minz = 0
+    scalefax = start - increm
+    while minz < minobs: 
+        scalefax = scalefax + increm
+        trax = mode[0](scalefax * inpx, **mode[1])
+        centers, startoz, endoz = RollingWindows(inp1 = trax, win_size = win_size, step = step, 
+                                                 extended = extended)
+    
+        
+        counts = RollingCount(trax, startoz, endoz)
+        print(counts)
+        minz = np.min(counts)
+
+    return scalefax
+
+
+
+def RollingWindows_MT(inp = None, win_size = 0.05, step = 0.01, extended = True, 
+                      scalefac = 1, 
+                      mode = [tanh, {}], mode_rev = [revtanh, {}]): 
+    
+    '''Requires inp to be max scaled'''
+
+    if inp.max() > 1: 
+        print('FAILED: NOT MAX SCALED')
+        return
+    
+    trax = mode[0](scalefac * inp, **mode[1])
+    centers, startoz, endoz = RollingWindows(inp1 = trax, win_size = win_size, step = step, 
+                                                 extended = extended)
+    
+    centers_rev, startoz_rev, endoz_rev = [mode_rev[0](x, **mode_rev[1]) / scalefac 
+                                           for x in [centers, startoz, endoz]]
+    
+    startoz_rev = np.nan_to_num(startoz_rev, nan = np.min(inp))
+    startoz_rev[startoz_rev < np.min(inp)] = np.min(inp)
+    
+    endoz_rev = np.nan_to_num(endoz_rev, nan = np.max(inp))
+    endoz_rev[endoz_rev > np.max(inp)] = np.max(inp)
+
+
+    return centers_rev, startoz_rev, endoz_rev
+
+
+
+
+
+
+#=========================================================================
 
 
 def Epsilon(inp, expo = 2, gamma = 1, smallest = True):
@@ -409,6 +670,21 @@ def PairwiseFuncer(inp1, inp2, mode1 = [np.mean, {}], mode2 = None):
 
     return pfs
 
+def MultiPairwiseFuncer(inps, mode1=[np.mean, {}], mode2=None):
+    """
+    For a list of inputs, computes all unique unordered pairs,
+    applies mode1 to each pair, and optionally applies mode2 to the results.
+    """
+    import itertools
+
+    # Get all unique unordered pairs (i < j)
+    pairs = list(itertools.combinations(inps, 2))
+    # Apply mode1 to each pair
+    results = [mode1[0](i, j, **mode1[1]) for i, j in pairs]
+    # Optionally apply mode2 to the list of results
+    if mode2 is not None:
+        results = mode2[0](results, **mode2[1])
+    return results
 
 
 def RelativeChange(a,b, perc = False): 
@@ -427,16 +703,23 @@ def RelativeChange(a,b, perc = False):
 
     #https://stackoverflow.com/questions/15644964/python-progress-bar-and-downloads
 
-class DownloadProgressBar(tqdm):
-    def update_to(self, b=1, bsize=1, tsize=None):
-        if tsize is not None:
-            self.total = tsize
-        self.update(b * bsize - self.n)
+import time
 
 def download_url(url, output_path):
-    with DownloadProgressBar(unit='B', unit_scale=True,
-                             miniters=1, desc=url.split('/')[-1]) as t:
-        urllib.request.urlretrieve(url, filename=output_path, reporthook=t.update_to)
+    last_update_time = time.time()
+    downloaded = 0
+
+    def reporthook(block_num, block_size, total_size):
+        nonlocal last_update_time, downloaded
+        downloaded = block_num * block_size
+        current_time = time.time()
+        if current_time - last_update_time >= 60:  # Print every 60 seconds
+            downloaded_gb = downloaded / (1024 ** 3)  # Convert to GB
+            total_gb = total_size / (1024 ** 3) if total_size else "Unknown"
+            print(f"Downloaded {downloaded_gb:.2f} GB of {total_gb:.2f} GB")
+            last_update_time = current_time
+
+    urllib.request.urlretrieve(url, filename=output_path, reporthook=reporthook)
 
 
 
@@ -450,3 +733,30 @@ def Standardizer(inp, ddof = 0, psu = 1e-8):
 def Tester():
     print('test')
     return 
+
+
+
+
+def filter_nested_dict(d, wanted_keys_per_level):
+    """
+    d: nested dict
+    wanted_keys_per_level: list of None (for all) or set/list of wanted keys per level
+    Example: [None, None, {1,2}, {'a','b'}]
+    """
+    def _filter(level, subdict):
+        if level >= len(wanted_keys_per_level):
+            return subdict
+        wanted = wanted_keys_per_level[level]
+        if wanted is None:
+            keys = subdict.keys()
+        else:
+            keys = [k for k in subdict if k in wanted]
+        out = {}
+        for k in keys:
+            v = subdict[k]
+            if isinstance(v, dict):
+                out[k] = _filter(level+1, v)
+            else:
+                out[k] = v
+        return out
+    return _filter(0, d)
