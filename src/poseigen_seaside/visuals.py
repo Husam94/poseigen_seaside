@@ -271,6 +271,7 @@ def ScaPlot(inp, switch = False,
             bounds = None, sharebounds = False, boundspad = None,
             pointsize = 10, color = 'maroon', alpha = 0.5, line = False, 
             xlabel = None, ylabel = None, suptitle = None, text = None,
+            titlesize = None,
             figsize = (5,5), fontsize = 10, ax = None): 
     
     """
@@ -294,7 +295,7 @@ def ScaPlot(inp, switch = False,
     x, y = (1, 0) if switch else (0, 1)
     
     plt.rc('font', size=fontsize) 
-    titlesize = int(fontsize + fontsize * 0.2)
+    if titlesize is None: titlesize = fontsize
     if ax is None: fig, ax = plt.subplots(figsize = figsize)
     
     if bounds is None: 

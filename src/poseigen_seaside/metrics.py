@@ -711,3 +711,23 @@ def NegativeCorrelation(inp1, inp2, std = 1, weights = None, use_weights = True)
 
 
     return negcor
+
+
+
+
+def half_sample_mode(data, axis=-1):
+    """
+    Computes the Half-Sample Mode (HSM) across a specified axis.
+    Optimized for small sample sizes like N=20.
+    """
+    def _hsm_1d(x):
+        x = np.sort(x)
+        while len(x) > 2:
+            half = (len(x) + 1) // 2
+            # Find the smallest interval containing 'half' points
+            w = x[half:] - x[:-half]
+            min_idx = np.argmin(w)
+            x = x[min_idx : min_idx + half]
+        return np.mean(x)
+
+    return np.apply_along_axis(_hsm_1d, axis, data)
