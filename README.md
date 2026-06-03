@@ -23,16 +23,13 @@ For local development, install from source using your preferred editable-install
 
 ## Usage
 
-Import from the package namespace:
+Import from the package:
 
 ```python
-import poseigen_seaside as seaside
-```
+import poseigen_seaside.basics as se
+import poseigen_seaside.metrics as mex
+import poseigen_seaside.visuals as viz
 
-Or import modules directly:
-
-```python
-from poseigen_seaside import basics, metrics, visuals
 ```
 
 ## Project Status
