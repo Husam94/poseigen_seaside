@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "poseigen_seaside"
-version = "0.1.1"
+version = "0.1.2"
 description = "Core utilities for the Poseigen package family"
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.12"
-license = { text = "MIT" }
+license = "MIT"
 license-files = ["LICENSE.txt"]
 authors = [{ name = "Husam Abdulnabi", email = "husam.abdulnabi@gmail.com" }]
 maintainers = [{ name = "Husam Abdulnabi", email = "husam.abdulnabi@gmail.com" }]
