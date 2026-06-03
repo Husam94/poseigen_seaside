@@ -159,29 +159,29 @@ def PearsonError(inp1, inp2, weights = None,
     
     return (1-cosf(xm,ym)).sum()
 
-def BetaPrime_msNLL(inp1, inp2, std = 1, 
-                  weights = None, pyt = False, pseudo = 1e-10):
+# def BetaPrime_msNLL(inp1, inp2, std = 1, 
+#                   weights = None, pyt = False, pseudo = 1e-10):
     
-    # "weights" is a placeholder. 
+#     # "weights" is a placeholder. 
     
-    alpha1 = std[:, :, :, :, 0]
-    alpha2 = std[:, :, :, :, 1]
+#     alpha1 = std[:, :, :, :, 0]
+#     alpha2 = std[:, :, :, :, 1]
 
-    lix = tu.BetaPrime_Rel(inp1, alpha1, alpha2, pyt = pyt, pseudo = pseudo)
+#     lix = tu.BetaPrime_Rel(inp1, alpha1, alpha2, pyt = pyt, pseudo = pseudo)
     
-    return 0 - ((math.log(lix + pseudo)).mean())
+#     return 0 - ((math.log(lix + pseudo)).mean())
 
 
 
-def BetaPrime_msNMP(inp1, inp2, std = 1, 
-                  weights = None, pyt = False, pseudo = 1e-10):
+# def BetaPrime_msNMP(inp1, inp2, std = 1, 
+#                   weights = None, pyt = False, pseudo = 1e-10):
     
-    alpha1 = std[:, :, :, :, 0]
-    alpha2 = std[:, :, :, :, 1]
+#     alpha1 = std[:, :, :, :, 0]
+#     alpha2 = std[:, :, :, :, 1]
 
-    lix = tu.BetaPrime_Rel(inp1, alpha1, alpha2, pyt = pyt, pseudo = pseudo)
+#     lix = tu.BetaPrime_Rel(inp1, alpha1, alpha2, pyt = pyt, pseudo = pseudo)
 
-    return 0 - (lix.mean())
+#     return 0 - (lix.mean())
 
 
 

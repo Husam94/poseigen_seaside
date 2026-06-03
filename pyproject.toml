@@ -1,61 +1,53 @@
-
-
 [build-system]
-
-requires = ["setuptools", 
-			"numpy", 
-			"pandas", 
-			"matplotlib", 
-			"denseweight", 
-			"tqdm", 
-      "torch"
-			]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
-
 name = "poseigen_seaside"
-
-version = "0.1.0" 
-
+version = "0.1.1"
+description = "Core utilities for the Poseigen package family"
+readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.12"
-
-description = "The basics for Poseigen software"
-
-readme = "README.md"
-
-license = "MIT"
-
-license-files = ["LICEN[CS]E.*"]
-
-keywords = []
-
+license = { text = "MIT" }
+license-files = ["LICENSE.txt"]
 authors = [{ name = "Husam Abdulnabi", email = "husam.abdulnabi@gmail.com" }]
-
-maintainers = [
-  { name = "Husam Abdulnabi", email = "husam.abdulnabi@gmail.com" },
-]
+maintainers = [{ name = "Husam Abdulnabi", email = "husam.abdulnabi@gmail.com" }]
+keywords = ["poseigen", "bioinformatics", "machine-learning", "utilities"]
 
 classifiers = [
-  # How mature is this project? Common values are
-  #   3 - Alpha
-  #   4 - Beta
-  #   5 - Production/Stable
   "Development Status :: 3 - Alpha",
-
-  # Indicate who your project is intended for
   "Intended Audience :: Developers",
+  "Topic :: Scientific/Engineering",
   "Topic :: Software Development",
-
+  "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
-  
+  "Programming Language :: Python :: 3.12",
 ]
 
-dependencies = ["numpy", 
-				"pandas", 
-				"matplotlib", 
-				"denseweight", 
-				"tqdm", 
-        "torch"]
+dependencies = [
+  "numpy",
+  "scipy",
+  "matplotlib",
+  "denseweight",
+  "tqdm",
+  "torch",
+  "torch-betainc",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build",
+  "twine",
+  "pytest",
+]
 
 [project.urls]
-"Homepage" = "https://github.com/husam94/poseigen_seaside"
+Homepage = "https://github.com/husam94/poseigen_seaside"
+Repository = "https://github.com/husam94/poseigen_seaside"
+Issues = "https://github.com/husam94/poseigen_seaside/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

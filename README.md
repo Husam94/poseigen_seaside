@@ -1,14 +1,45 @@
-# Seaside 
+# Seaside
 
-This package is the foundation for the other Poseigen packages. 
+Seaside is the core utility package in the Poseigen family.
+It provides shared helpers for numerical workflows, metrics, and plotting, and serves as the foundation for other Poseigen packages.
 
-It contains 3 modules: 
+## Features
 
-1. basics
-- Contains an assortment of basic functions. 
+Seaside is organized into three modules:
 
-2. metrics 
-- Contains functions for metrics including [Deviation Error](https://doi.org/10.1101/2025.05.29.656931)
+- Basics: general-purpose utilities for array handling, transformations, rolling-window operations, and data helpers.
+- Metrics: evaluation functions for model and distribution-based scoring.
+- Visuals: plotting utilities for line plots, heatmaps, and scatter-plus-histogram visualizations.
 
-3. visuals
-- Contains functions for plotting and figures. 
+## Installation
+
+Install from PyPI:
+
+```bash
+pip install poseigen_seaside
+```
+
+For local development, install from source using your preferred editable-install workflow.
+
+## Usage
+
+Import from the package namespace:
+
+```python
+import poseigen_seaside as seaside
+```
+
+Or import modules directly:
+
+```python
+from poseigen_seaside import basics, metrics, visuals
+```
+
+## Project Status
+
+Seaside is in active development and is intended to be the shared base package for the Poseigen ecosystem.
+
+## License
+
+This project is released under the MIT License.
+
