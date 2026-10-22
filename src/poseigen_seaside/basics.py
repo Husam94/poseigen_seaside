@@ -760,3 +760,108 @@ def filter_nested_dict(d, wanted_keys_per_level):
                 out[k] = v
         return out
     return _filter(0, d)
+
+
+
+
+def sample_chunks(arr, chunk_size=5):
+    """
+    Randomly selects 1 value from every `chunk_size` chunk.
+    Safely handles arrays not perfectly divisible by chunk_size.
+    """
+    # 1. Get the starting index of every chunk
+    starts = np.arange(0, len(arr), chunk_size)
+    
+    # 2. Find the length of each chunk (handles the final remainder chunk)
+    lengths = np.minimum(chunk_size, len(arr) - starts)
+    
+    # 3. Generate a random offset for each chunk
+    offsets = np.random.randint(0, lengths)
+    
+    # 4. Add the offset to the starts and extract the values
+    return arr[starts + offsets]
+
+
+
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def parallel_map(inputs, func, func_args=None, max_workers=None):
+    """
+    Apply `func` to each item in `inputs` in parallel.
+
+    Parameters
+    ----------
+    inputs : iterable
+        Items to process. Each item is passed as the first argument to `func`.
+    func : callable
+        Function to call as func(item, **func_args).
+    func_args : dict, optional
+        Additional keyword arguments passed to `func`.
+    max_workers : int or None, optional
+        Number of worker threads (None lets ThreadPoolExecutor choose).
+
+    Returns
+    -------
+    list
+        Results in the same order as `inputs`.
+    """
+    if func_args is None:
+        func_args = {}
+
+    inputs = list(inputs)
+    results = [None] * len(inputs)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_idx = {
+            executor.submit(func, item, **func_args): i
+            for i, item in enumerate(inputs)
+        }
+
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            results[idx] = future.result()
+
+    return results
+
+
+from collections import defaultdict
+
+def shared_elements(lists, threshold=0.95, return_idxs=False):
+    """
+    Find elements shared across at least `threshold` fraction of lists.
+    Optionally return the list indices that contain ALL shared elements.
+
+    Parameters
+    ----------
+    lists : list of list
+        Input lists of elements.
+    threshold : float, default 0.95
+        Minimum fraction of lists an element must appear in.
+    return_idxs : bool, default False
+        If True, also return the list indices that contain all shared elements.
+
+    Returns
+    -------
+    list
+        Shared elements.
+    list, optional
+        Sorted list indices of lists containing every shared element.
+    """
+    element_to_idxs = defaultdict(set)
+
+    for i, lst in enumerate(lists):
+        for x in set(lst):
+            element_to_idxs[x].add(i)
+
+    n = len(lists)
+    min_count = int(np.ceil(threshold * n))
+
+    shared = [x for x, idxs in element_to_idxs.items() if len(idxs) >= min_count]
+
+    if not return_idxs:
+        return shared
+
+    # Intersection of index sets across all shared elements
+    common_idxs = set.intersection(*(element_to_idxs[x] for x in shared))
+    return shared, sorted(common_idxs)

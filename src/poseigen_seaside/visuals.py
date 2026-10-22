@@ -984,3 +984,300 @@ def LogoPlot(arr, ax = None, figsize = (5,5), fontsize = 10,
     ax.tick_params(axis='y', labelsize=fontsize)
 
     return ax
+
+
+
+
+
+
+
+
+
+
+
+
+#==========================
+
+import cairosvg
+import cairosvg.surface as cairosvg_surface
+
+cairosvg_surface.MAX_RENDERED_ELEMENT = 1_000_000  # or float('inf')
+
+from PIL import Image
+
+def svg_2_tiff(figs_folder, fig_name, fig_size): 
+
+    '''fig_size maximum matplotlib width = 14'''
+
+    fig_width_max = 14
+
+    max_width_pixels = 3900
+    #max_width_per_mpl = max_width_pixels * fig_width_max
+
+    fig_width, fig_height = fig_size
+
+    output_width = max_width_pixels * (fig_width /  fig_width_max)
+    output_height = output_width * (fig_height / fig_width)
+
+    print(output_width, output_height)
+
+    png_tmp = figs_folder + fig_name + '.png'
+    tiff_out = figs_folder + fig_name + '.tiff'
+
+    cairosvg.svg2png(
+        url= figs_folder + fig_name + '.svg',
+        write_to=png_tmp,
+        output_width=output_width,
+        output_height=output_height,
+        dpi=600
+    )
+
+    Image.open(png_tmp).save(
+        tiff_out,
+        format='TIFF',
+        dpi=(600, 600),
+        compression='tiff_lzw'
+    )
+
+
+def half_tiff(figs_folder, fig_name): 
+
+    input_path = figs_folder + fig_name + '.tiff'
+    output_path = figs_folder + fig_name + '_half.tiff'
+
+    with Image.open(input_path) as img:
+        new_size = (img.width // 2, img.height // 2)
+        img_resized = img.resize(new_size, Image.Resampling.LANCZOS)
+        img_resized.save(
+            output_path,
+            format='TIFF',
+            dpi=(img.info.get('dpi', (600, 600))[0], img.info.get('dpi', (600, 600))[1]),
+            compression='tiff_lzw'
+        )
+
+    return 
+
+
+def stack_tiffs_vertical(tiff_paths, output_path, resize_to_max_width=True, background=255):
+    """
+    Stack multiple TIFF files vertically into a single TIFF.
+    
+    Parameters
+    ----------
+    tiff_paths : list[str]
+        Paths to the input TIFF files (top to bottom order).
+    output_path : str
+        Path where the stacked TIFF will be saved.
+    resize_to_max_width : bool
+        If True, resize images to the widest width while keeping aspect ratio.
+        If False, all images must already have the same width.
+    background : int
+        Background fill value for padding (used only if aligning modes).
+    """
+    images = [Image.open(p) for p in tiff_paths]
+    
+    # Normalize modes so they can be stacked together
+    modes = {img.mode for img in images}
+    if len(modes) > 1:
+        if any('A' in m for m in modes):
+            images = [img.convert('RGBA') for img in images]
+        else:
+            images = [img.convert('RGB') for img in images]
+    
+    widths = [img.width for img in images]
+    max_w = max(widths)
+    
+    if not resize_to_max_width and len(set(widths)) > 1:
+        raise ValueError("Input TIFFs have different widths; set resize_to_max_width=True")
+    
+    # Resize to common width if requested
+    resized = []
+    for img in images:
+        if img.width != max_w:
+            new_h = int(img.height * max_w / img.width)
+            img = img.resize((max_w, new_h), Image.Resampling.LANCZOS)
+        resized.append(img)
+    
+    # Stack vertically
+    total_h = sum(img.height for img in resized)
+    stacked = Image.new(resized[0].mode, (max_w, total_h), background)
+    
+    y = 0
+    for img in resized:
+        stacked.paste(img, (0, y))
+        y += img.height
+    
+    # Preserve DPI from the first image
+    dpi = resized[0].info.get('dpi', (600, 600))
+    
+    stacked.save(
+        output_path,
+        format='TIFF',
+        dpi=dpi,
+        compression='tiff_lzw'
+    )
+    
+    for img in images + resized:
+        img.close()
+    
+    return output_path
+
+
+# def stack_tiffs_centered(top_path, bottom_path, output_path, dpi=600, compress='tiff_lzw'):
+#     """
+#     Vertically stack two TIFFs and center the narrower image.
+#     """
+#     im1 = Image.open(top_path)
+#     im2 = Image.open(bottom_path)
+
+#     # Ensure both images are in a consistent mode, e.g. RGBA or RGB
+#     if im1.mode != im2.mode:
+#         # Convert both to RGB if they differ
+#         target_mode = 'RGBA' if 'A' in im1.mode or 'A' in im2.mode else 'RGB'
+#         im1 = im1.convert(target_mode)
+#         im2 = im2.convert(target_mode)
+
+#     # Target width is the wider of the two
+#     max_w = max(im1.width, im2.width)
+#     total_h = im1.height + im2.height
+
+#     # Create blank canvas
+#     canvas = Image.new(im1.mode, (max_w, total_h), (255, 255, 255, 0))
+
+#     # Center each image horizontally
+#     x1 = (max_w - im1.width) // 2
+#     x2 = (max_w - im2.width) // 2
+
+#     canvas.paste(im1, (x1, 0))
+#     canvas.paste(im2, (x2, im1.height))
+
+#     # Save with TIFF options
+#     save_kwargs = {'compression': compress} if compress else {}
+#     canvas.save(output_path, dpi=(dpi, dpi), **save_kwargs)
+
+
+def new_save_fig(figs_folder, fig_name):
+    save_kwargs = {
+    'bbox_inches': 'tight',
+    #'pad_inches': 0.15
+    }
+
+    plt.savefig(figs_folder + fig_name + '.svg', **save_kwargs)
+
+    plt.savefig(
+        figs_folder + fig_name + '.tiff',
+        format='tiff',
+        dpi=600,
+        pil_kwargs={'compression': 'tiff_lzw'}, 
+        **save_kwargs
+    )
+
+    half_tiff(figs_folder, fig_name)
+
+# def stack_tiffs_centered(tiff_paths, output_path, dpi=600, compress='tiff_lzw'):
+#     """
+#     Vertically stack multiple TIFFs and center each one horizontally.
+    
+#     Parameters
+#     ----------
+#     tiff_paths : list[str]
+#         Paths to the input TIFF files, stacked top-to-bottom in the given order.
+#     output_path : str
+#         Path where the stacked TIFF will be saved.
+#     dpi : int
+#         DPI to store in the output TIFF metadata.
+#     compress : str or None
+#         TIFF compression to use (e.g. 'tiff_lzw'). Set to None for no compression.
+#     """
+#     if len(tiff_paths) < 1:
+#         raise ValueError("tiff_paths must contain at least one path")
+
+#     images = [Image.open(p) for p in tiff_paths]
+
+#     # Normalize modes so all images can share the same canvas
+#     modes = {img.mode for img in images}
+#     if len(modes) > 1:
+#         target_mode = 'RGBA' if any('A' in m for m in modes) else 'RGB'
+#         images = [img.convert(target_mode) for img in images]
+
+#     max_w = max(img.width for img in images)
+#     total_h = sum(img.height for img in images)
+
+#     canvas = Image.new(images[0].mode, (max_w, total_h), (255, 255, 255, 0))
+
+#     y = 0
+#     for img in images:
+#         x = (max_w - img.width) // 2
+#         canvas.paste(img, (x, y))
+#         y += img.height
+
+#     save_kwargs = {'compression': compress} if compress else {}
+#     canvas.save(output_path, dpi=(dpi, dpi), **save_kwargs)
+
+#     for img in images:
+#         img.close()
+
+def stack_tiffs_centered(tiff_paths, output_path, dpi=600, compress='tiff_lzw',
+                         resize_to_max_width=False, background=(255, 255, 255)):
+    """
+    Vertically stack multiple TIFFs and center each one horizontally.
+
+    Parameters
+    ----------
+    tiff_paths : list[str]
+        Paths to the input TIFF files, stacked top-to-bottom in the given order.
+    output_path : str
+        Path where the stacked TIFF will be saved.
+    dpi : int
+        DPI to store in the output TIFF metadata.
+    compress : str or None
+        TIFF compression to use (e.g. 'tiff_lzw'). Set to None for no compression.
+    resize_to_max_width : bool
+        If True, resize narrower images to the widest width so there are no
+        horizontal gaps. If False, center images on a shared canvas.
+    background : tuple
+        Background fill color. Default is opaque white (255, 255, 255).
+        Use (255, 255, 255, 0) for transparent if the mode supports alpha.
+    """
+    if len(tiff_paths) < 1:
+        raise ValueError("tiff_paths must contain at least one path")
+
+    images = [Image.open(p) for p in tiff_paths]
+
+    # Normalize modes so all images can share the same canvas
+    modes = {img.mode for img in images}
+    if len(modes) > 1:
+        target_mode = 'RGBA' if any('A' in m for m in modes) else 'RGB'
+        images = [img.convert(target_mode) for img in images]
+
+    max_w = max(img.width for img in images)
+
+    # Resize narrower images to fill width if requested
+    if resize_to_max_width:
+        resized = []
+        for img in images:
+            if img.width != max_w:
+                new_h = int(img.height * max_w / img.width)
+                img = img.resize((max_w, new_h), Image.Resampling.LANCZOS)
+            resized.append(img)
+        images = resized
+
+    total_h = sum(img.height for img in images)
+
+    # Adjust background tuple to match image mode length
+    if images[0].mode == 'RGBA' and len(background) == 3:
+        background = (*background, 255)
+
+    canvas = Image.new(images[0].mode, (max_w, total_h), background)
+
+    y = 0
+    for img in images:
+        x = (max_w - img.width) // 2
+        canvas.paste(img, (x, y))
+        y += img.height
+
+    save_kwargs = {'compression': compress} if compress else {}
+    canvas.save(output_path, dpi=(dpi, dpi), **save_kwargs)
+
+    for img in images:
+        img.close()

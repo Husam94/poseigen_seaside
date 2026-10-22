@@ -731,3 +731,206 @@ def half_sample_mode(data, axis=-1):
         return np.mean(x)
 
     return np.apply_along_axis(_hsm_1d, axis, data)
+
+
+
+#-----------------------------
+
+def Asym_AError(inp1, inp2, weights = None, mean = True,
+           expo = 2, root = False, 
+           sign_mult = 2,
+           weightsum = True, use_weights = True): 
+    
+    #added revbase and revpseudo to reverse log transformations.
+    #Applies to both inputs. 
+
+    if use_weights == False: weights = None
+
+    if expo != 2: root = False
+
+    w = WeightsAdjuster(inp1, weights)
+
+    is_torch = isinstance(inp1, torch.Tensor)
+    sign_mismatch = (inp1 * inp2) < 0
+    if is_torch: 
+        sign_weights = torch.where(
+            sign_mismatch, 
+            torch.tensor(sign_mult, dtype=inp1.dtype, device=inp1.device), 
+            torch.tensor(1.0, dtype=inp1.dtype, device=inp1.device))
+    else:
+        sign_weights = np.where(sign_mismatch, sign_mult, 1.0)
+
+    e = abs(inp1-inp2) * sign_weights
+    AE = w * (e ** expo)
+    
+    if mean == True:
+        if isinstance(w, int) == False: 
+            if weightsum: wsum = w.sum()
+            else: wsum = 1
+            AE = AE.sum() / wsum
+        else: AE = AE.mean()
+
+        if root: AE = AE**(1/2)
+
+    return AE
+
+
+def MSE_uncert(inp1, inp2, weights=None, mean=True, weightsum=True, use_weights=True): 
+    '''
+    inp1 = pred of shape [N, ..., 2] where the last dimension is [prediction, log variance]
+    inp2 = actuals of shape [N, ..., 1]
+    '''
+    
+    if not use_weights: 
+        weights = None
+        
+    w = WeightsAdjuster(inp1, weights)
+
+    mu = inp1[..., 0:1]
+    log_var = inp1[..., 1:2]
+
+    squared_error = (mu - inp2) ** 2
+
+    is_torch = isinstance(inp1, torch.Tensor)
+    precision = torch.exp(-log_var) if is_torch else np.exp(-log_var)
+
+    # Base element-wise loss
+    AE = 0.5 * precision * squared_error + 0.5 * log_var
+    
+    # 2. Multiply the element-wise loss by the weights before reducing
+    if w is not None and not isinstance(w, int):
+        AE = AE * w
+    
+    # 3. Reduction logic
+    if mean:
+        if w is not None and not isinstance(w, int): 
+            wsum = w.sum() if weightsum else 1
+            AE = AE.sum() / wsum
+        else: 
+            AE = AE.mean()
+
+    return AE
+
+
+
+def scaled_dot_product(inp1, inp2, weights=None, mean=True, weightsum=True, use_weights=True): 
+    '''
+    inp1 = pred of shape [N, ..., 2] where the last dimension is [prediction, log variance]
+    inp2 = actuals of shape [N, ..., 1]
+    '''
+    
+    if not use_weights: 
+        weights = None
+        
+    w = WeightsAdjuster(inp1, weights)
+
+    AE = -(inp1 * inp2)
+    
+    # 2. Multiply the element-wise loss by the weights before reducing
+    if w is not None and not isinstance(w, int):
+        AE = AE * w
+    
+    # 3. Reduction logic
+    if mean:
+        if w is not None and not isinstance(w, int): 
+            wsum = w.sum() if weightsum else 1
+            AE = AE.sum() / wsum
+        else: 
+            AE = AE.mean()
+
+    return AE
+
+
+def consistent_sdp(inp1, inp2,
+                   alpha=1.0,
+                   clump=5, reshape=None, axis=None,
+                   weights=None, use_weights=True, weightsum=True,
+                   mean=True):
+    """
+    Clumps inp1/inp2 along `axis`, computes a weighted scaled_dot_product
+    per chunk, then returns mean(chunk_scores) + alpha * std(chunk_scores).
+
+    Works with both NumPy arrays and PyTorch tensors.
+
+    Parameters:
+    - inp1: predictions of shape [..., 1]
+    - inp2: actuals of shape [..., 1]
+    - alpha: weight on the standard deviation term
+    - clump: number of consecutive elements per chunk along `axis`
+    - reshape: optional tuple to reshape non-feature dimensions
+    - axis: axis to clump along (default 1)
+    - weights: optional per-element weights, passed to WeightsAdjuster
+    - use_weights: if False, weights are ignored
+    - weightsum: if True, divide weighted chunk sums by sum(weights) per chunk
+    - mean: if True return scalar summary; if False return per-chunk scores
+    """
+
+    # --- Backend selection ---
+    if isinstance(inp1, torch.Tensor):
+        xp = torch
+    else:
+        xp = np
+
+    # --- Weights handling (same logic as scaled_dot_product) ---
+    if not use_weights:
+        weights = None
+
+    if use_weights and weights is not None:
+        w = WeightsAdjuster(inp1, weights)
+        if isinstance(w, int):
+            w = None
+    else:
+        w = None
+
+    # --- Optional reshape ---
+    if reshape is not None:
+        inp1 = inp1.reshape(*reshape)
+        inp2 = inp2.reshape(*reshape)
+        #print(inp1.shape, inp2.shape)
+        if w is not None:
+            w = w.reshape(*reshape)
+
+    if axis is None:
+        axis = 1
+
+    # --- Move clump axis to position -2 ---
+    inp1 = xp.moveaxis(inp1, axis, -2)
+    inp2 = xp.moveaxis(inp2, axis, -2)
+    if w is not None:
+        w = xp.moveaxis(w, axis, -2)
+
+    K = inp1.shape[-2]
+    if K % clump != 0:
+        raise ValueError(
+            f"Clump axis length {K} is not divisible by clump={clump}"
+        )
+
+    # --- Reshape into (..., n_chunks, clump, n_features) ---
+    n_chunks = K // clump
+    chunk_shape = inp1.shape[:-2] + (n_chunks, clump, inp1.shape[-1])
+    inp1 = inp1.reshape(chunk_shape)
+    inp2 = inp2.reshape(chunk_shape[:-1] + (inp2.shape[-1],))
+    if w is not None:
+        w = w.reshape(chunk_shape[:-1] + (w.shape[-1],))
+
+    # --- Per-chunk score ---
+    AE = -(inp1 * inp2)
+
+    if w is not None:
+        AE = AE * w
+        if weightsum:
+            denom = w.sum(axis=(-2, -1))
+            chunk_scores = AE.sum(axis=(-2, -1)) / denom
+        else:
+            chunk_scores = AE.sum(axis=(-2, -1))
+    else:
+        chunk_scores = AE.mean(axis=(-2, -1))
+
+    if not mean:
+        return chunk_scores
+
+    # --- Consistency summary ---
+    if xp is torch:
+        return chunk_scores.mean() + alpha * chunk_scores.std(unbiased=False)
+    else:
+        return chunk_scores.mean() + alpha * chunk_scores.std(ddof=0)
