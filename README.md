@@ -3,6 +3,8 @@
 Seaside is the core utility package in the Poseigen family.
 It provides shared helpers for numerical workflows, metrics, and plotting, and serves as the foundation for other Poseigen packages.
 
+Part of the [Poseigen ecosystem](https://github.com/Husam94/poseigen).
+
 ## Features
 
 Seaside is organized into three modules:
@@ -39,4 +41,3 @@ Seaside is in active development and is intended to be the shared base package f
 ## License
 
 This project is released under the MIT License.
-
